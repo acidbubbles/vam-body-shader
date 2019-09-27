@@ -1,39 +1,25 @@
-#define POV_DIAGNOSTICS
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
 /// <summary>
-/// Improved PoV Version 0.0.0
-/// By Acidbubbles
-/// Possession that actually feels right.
-/// Source: https://github.com/acidbubbles/vam-improved-pov
+/// hide character version 1.0
+/// a modification of acidbubbles "improved pov"
+/// tl;dr: it completely hides the actor the plugin is applied on. does not hide clothing or hair.
+/// you can modify what parts are hidden by removing things under "MaterialsToHide" (the list starting with defaultMat)
 /// </summary>
-public class ImprovedPoV : MVRScript
+public class HideCharacter : MVRScript
 {
     private Atom _person;
-    private Camera _mainCamera;
-    private Possessor _possessor;
-    private FreeControllerV3 _headControl;
     private DAZCharacterSelector _selector;
-    private JSONStorableFloat _cameraDepthJSON;
-    private JSONStorableFloat _cameraHeightJSON;
-    private JSONStorableFloat _cameraPitchJSON;
-    private JSONStorableFloat _clipDistanceJSON;
-    private JSONStorableBool _autoWorldScaleJSON;
-    private JSONStorableBool _possessedOnlyJSON;
-    private JSONStorableBool _hideFaceJSON;
-    private JSONStorableBool _hideHairJSON;
+    private JSONStorableBool _hideCharacterToggleJSON;
+    private JSONStorableBool _hideCharacterJSON;
 
     private SkinHandler _skinHandler;
-    private HairHandler _hairHandler;
     // For change detection purposes
     private DAZCharacter _character;
-    private DAZHairGroup _hair;
 
-
-    // Whether the PoV effects are currently active, i.e. in possession mode
     private bool _lastActive;
     // Requires re-generating all shaders and materials, either because last frame was not ready or because something changed
     private bool _dirty;
@@ -41,8 +27,6 @@ public class ImprovedPoV : MVRScript
     private bool _failedOnce;
     // When waiting for a model to load, how long before we abandon
     private int _tryAgainAttempts;
-    private float _originalWorldScale;
-    private float _originalPlayerHeightAdjust;
 
     public override void Init()
     {
@@ -50,79 +34,55 @@ public class ImprovedPoV : MVRScript
         {
             if (containingAtom?.type != "Person")
             {
-                SuperController.LogError($"Please apply the ImprovedPoV plugin to the 'Person' atom you wish to possess. Currently applied on '{containingAtom.type}'.");
+                SuperController.LogError($"This plugin only works on Person atoms");
                 DestroyImmediate(this);
                 return;
             }
 
             _person = containingAtom;
-            _mainCamera = CameraTarget.centerTarget?.targetCamera;
-            _possessor = SuperController
-                .FindObjectsOfType(typeof(Possessor))
-                .Where(p => p.name == "CenterEye")
-                .Select(p => p as Possessor)
-                .FirstOrDefault();
-            _headControl = (FreeControllerV3)_person.GetStorableByID("headControl");
             _selector = _person.GetComponentInChildren<DAZCharacterSelector>();
 
             InitControls();
             Camera.onPreRender += OnPreRender;
-            Camera.onPostRender += OnPostRender;
+            Camera.onPostRender += OnPreRender;
         }
         catch (Exception e)
         {
-            SuperController.LogError("Failed to initialize Improved PoV: " + e);
+            SuperController.LogError("something failed: " + e);
             DestroyImmediate(this);
         }
     }
 
     private void OnPreRender(Camera cam)
     {
-        if (!IsPovCamera(cam)) return;
 
         try
         {
             if (_skinHandler != null)
                 _skinHandler.BeforeRender();
-            if (_hairHandler != null)
-                _hairHandler.BeforeRender();
         }
         catch (Exception e)
         {
             if (_failedOnce) return;
             _failedOnce = true;
-            SuperController.LogError("Failed to execute pre render Improved PoV: " + e);
+            SuperController.LogError("something failed on prerender: " + e);
         }
     }
 
     private void OnPostRender(Camera cam)
     {
-        if (!IsPovCamera(cam)) return;
 
         try
         {
             if (_skinHandler != null)
                 _skinHandler.AfterRender();
-            if (_hairHandler != null)
-                _hairHandler.AfterRender();
         }
         catch (Exception e)
         {
             if (_failedOnce) return;
             _failedOnce = true;
-            SuperController.LogError("Failed to execute post render Improved PoV: " + e);
+            SuperController.LogError("something failed on postrender: " + e);
         }
-    }
-
-    private bool IsPovCamera(Camera cam)
-    {
-        return
-            // Oculus Rift
-            cam.name == "CenterEyeAnchor" ||
-            // Steam VR
-            cam.name == "Camera (eye)" ||
-            // Desktop
-            cam.name == "MonitorRig";
     }
 
     private void InitControls()
@@ -130,64 +90,11 @@ public class ImprovedPoV : MVRScript
         try
         {
             {
-                _cameraDepthJSON = new JSONStorableFloat("Camera depth", 0.054f, 0f, 0.2f, false);
-                RegisterFloat(_cameraDepthJSON);
-                var cameraDepthSlider = CreateSlider(_cameraDepthJSON, false);
-                cameraDepthSlider.slider.onValueChanged.AddListener(delegate (float val)
-                {
-                    ApplyCameraPosition(_lastActive);
-                });
-            }
-
-            {
-                _cameraHeightJSON = new JSONStorableFloat("Camera height", 0f, -0.05f, 0.05f, false);
-                RegisterFloat(_cameraHeightJSON);
-                var cameraHeightSlider = CreateSlider(_cameraHeightJSON, false);
-                cameraHeightSlider.slider.onValueChanged.AddListener(delegate (float val)
-                {
-                    ApplyCameraPosition(_lastActive);
-                });
-            }
-
-            {
-                _cameraPitchJSON = new JSONStorableFloat("Camera pitch", 0f, -135f, 45f, true);
-                RegisterFloat(_cameraPitchJSON);
-                var cameraPitchSlider = CreateSlider(_cameraPitchJSON, false);
-                cameraPitchSlider.slider.onValueChanged.AddListener(delegate (float val)
-                {
-                    ApplyCameraPosition(_lastActive);
-                });
-            }
-
-            {
-                _clipDistanceJSON = new JSONStorableFloat("Clip distance", 0.01f, 0.01f, .2f, true);
-                RegisterFloat(_clipDistanceJSON);
-                var clipDistanceSlider = CreateSlider(_clipDistanceJSON, false);
-                clipDistanceSlider.slider.onValueChanged.AddListener(delegate (float val)
-                {
-                    ApplyCameraPosition(_lastActive);
-                });
-            }
-
-            {
-                _autoWorldScaleJSON = new JSONStorableBool("Auto world scale", false);
-                RegisterBool(_autoWorldScaleJSON);
-                var autoWorldScaleToggle = CreateToggle(_autoWorldScaleJSON, true);
-                autoWorldScaleToggle.toggle.onValueChanged.AddListener(delegate (bool val)
-                {
-                    _dirty = true;
-                });
-            }
-
-            {
                 var possessedOnlyDefaultValue = true;
-#if (POV_DIAGNOSTICS)
-                // NOTE: Easier to test when it's always on
-                possessedOnlyDefaultValue = false;
-#endif
-                _possessedOnlyJSON = new JSONStorableBool("Activate only when possessed", possessedOnlyDefaultValue);
-                RegisterBool(_possessedOnlyJSON);
-                var possessedOnlyCheckbox = CreateToggle(_possessedOnlyJSON, true);
+
+                _hideCharacterToggleJSON = new JSONStorableBool("Toggle off to hide character", possessedOnlyDefaultValue);
+                RegisterBool(_hideCharacterToggleJSON);
+                var possessedOnlyCheckbox = CreateToggle(_hideCharacterToggleJSON, true);
                 possessedOnlyCheckbox.toggle.onValueChanged.AddListener(delegate (bool val)
                 {
                     _dirty = true;
@@ -195,20 +102,10 @@ public class ImprovedPoV : MVRScript
             }
 
             {
-                _hideFaceJSON = new JSONStorableBool("Hide face", true);
-                RegisterBool(_hideFaceJSON);
-                var hideFaceToggle = CreateToggle(_hideFaceJSON, true);
+                _hideCharacterJSON = new JSONStorableBool("Keep this toggled on", true);
+                RegisterBool(_hideCharacterJSON);
+                var hideFaceToggle = CreateToggle(_hideCharacterJSON, true);
                 hideFaceToggle.toggle.onValueChanged.AddListener(delegate (bool val)
-                {
-                    _dirty = true;
-                });
-            }
-
-            {
-                _hideHairJSON = new JSONStorableBool("Hide hair", true);
-                RegisterBool(_hideHairJSON);
-                var hideHairToggle = CreateToggle(_hideHairJSON, true);
-                hideHairToggle.toggle.onValueChanged.AddListener(delegate (bool val)
                 {
                     _dirty = true;
                 });
@@ -230,7 +127,7 @@ public class ImprovedPoV : MVRScript
         }
         catch (Exception e)
         {
-            SuperController.LogError("Failed to disable Improved PoV: " + e);
+            SuperController.LogError("something failed: " + e);
         }
     }
 
@@ -245,7 +142,7 @@ public class ImprovedPoV : MVRScript
     {
         try
         {
-            var active = _headControl.possessed || !_possessedOnlyJSON.val;
+            var active = !_hideCharacterToggleJSON.val;
 
             if (!_lastActive && active)
             {
@@ -268,18 +165,12 @@ public class ImprovedPoV : MVRScript
                 _skinHandler = null;
                 ApplyAll(true);
             }
-            else if (_lastActive && _selector.selectedHairGroup != _hair)
-            {
-                _hairHandler?.Restore();
-                _hairHandler = null;
-                ApplyAll(true);
-            }
         }
         catch (Exception e)
         {
             if (_failedOnce) return;
             _failedOnce = true;
-            SuperController.LogError("Failed to update Improved PoV: " + e);
+            SuperController.LogError("something failed: " + e);
         }
     }
 
@@ -294,16 +185,9 @@ public class ImprovedPoV : MVRScript
         }
 
         _character = _selector.selectedCharacter;
-        _hair = _selector.selectedHairGroup;
 
-        ApplyAutoWorldScale(active);
-        ApplyCameraPosition(active);
-        ApplyPossessorMeshVisibility(active);
-        if (UpdateHandler(ref _skinHandler, active && _hideFaceJSON.val))
+        if (UpdateHandler(ref _skinHandler, active && _hideCharacterJSON.val))
             ConfigureHandler("Skin", ref _skinHandler, _skinHandler.Configure(_character.skin));
-        if (UpdateHandler(ref _hairHandler, active && _hideHairJSON.val))
-            ConfigureHandler("Hair", ref _hairHandler, _hairHandler.Configure(_character, _hair));
-
         if (!_dirty) _tryAgainAttempts = 0;
     }
 
@@ -313,7 +197,7 @@ public class ImprovedPoV : MVRScript
         _tryAgainAttempts++;
         if (_tryAgainAttempts > 90 * 20) // Approximately 20 to 40 seconds
         {
-            SuperController.LogError("Failed to apply ImprovedPoV. Reason: " + reason + ". Try reloading the plugin, or report the issue to @Acidbubbles.");
+            SuperController.LogError("something failed. Reason: " + reason + ".");
             enabled = false;
         }
     }
@@ -360,85 +244,6 @@ public class ImprovedPoV : MVRScript
         return false;
     }
 
-    private void ApplyCameraPosition(bool active)
-    {
-        try
-        {
-            _mainCamera.nearClipPlane = active ? _clipDistanceJSON.val : 0.01f;
-
-            var cameraDepth = active ? _cameraDepthJSON.val : 0;
-            var cameraHeight = active ? _cameraHeightJSON.val : 0;
-            var cameraPitch = active ? _cameraPitchJSON.val : 0;
-            var pos = _possessor.transform.position;
-            _mainCamera.transform.position = pos - _mainCamera.transform.rotation * Vector3.forward * cameraDepth - _mainCamera.transform.rotation * Vector3.down * cameraHeight;
-            _possessor.transform.localEulerAngles = new Vector3(cameraPitch, 0f, 0f);
-            _possessor.transform.position = pos;
-        }
-        catch (Exception e)
-        {
-            SuperController.LogError("Failed to update camera position: " + e);
-        }
-    }
-
-    private void ApplyPossessorMeshVisibility(bool active)
-    {
-        try
-        {
-            var meshActive = !active;
-
-            _possessor.gameObject.transform.Find("Capsule")?.gameObject.SetActive(meshActive);
-            _possessor.gameObject.transform.Find("Sphere1")?.gameObject.SetActive(meshActive);
-            _possessor.gameObject.transform.Find("Sphere2")?.gameObject.SetActive(meshActive);
-        }
-        catch (Exception e)
-        {
-            SuperController.LogError("Failed to update possessor mesh visibility: " + e);
-        }
-    }
-
-    private void ApplyAutoWorldScale(bool active)
-    {
-        if (!active)
-        {
-            if (_originalWorldScale != 0f && SuperController.singleton.worldScale != _originalWorldScale)
-            {
-                SuperController.singleton.worldScale = _originalWorldScale;
-                _originalWorldScale = 0f;
-            }
-            return;
-        }
-
-        if (!_autoWorldScaleJSON.val) return;
-
-        if (_originalWorldScale == 0f){
-            _originalWorldScale = SuperController.singleton.worldScale;
-            _originalPlayerHeightAdjust = SuperController.singleton.playerHeightAdjust;
-        }
-
-        var eyes = _person.GetComponentsInChildren<LookAtWithLimits>();
-        var lEye = eyes.FirstOrDefault(eye => eye.name == "lEye");
-        var rEye = eyes.FirstOrDefault(eye => eye.name == "rEye");
-        if (lEye == null || rEye == null)
-            return;
-        var atomEyeDistance = Vector3.Distance(lEye.transform.position, rEye.transform.position);
-
-        var rig = GameObject.FindObjectOfType<OVRCameraRig>();
-        if (rig == null)
-            return;
-        var rigEyesDistance = Vector3.Distance(rig.leftEyeAnchor.transform.position, rig.rightEyeAnchor.transform.position);
-
-        var scale = atomEyeDistance / rigEyesDistance;
-        var worldScale = SuperController.singleton.worldScale * scale;
-
-        if (SuperController.singleton.worldScale != worldScale)
-            SuperController.singleton.worldScale = worldScale;
-
-        var yAdjust = _possessor.autoSnapPoint.position.y - _headControl.possessPoint.position.y;
-
-        if (yAdjust != 0)
-            SuperController.singleton.playerHeightAdjust = SuperController.singleton.playerHeightAdjust - yAdjust;
-    }
-
     public static class HandlerConfigurationResult
     {
         public const int Success = 0;
@@ -477,33 +282,44 @@ public class ImprovedPoV : MVRScript
 
         public static readonly string[] MaterialsToHide = new[]
         {
-            "Lacrimals",
-            "Pupils",
-            "Lips",
-            "Gums",
-            "Irises",
-            "Teeth",
-            "Face",
-            "Head",
-            "InnerMouth",
-            "Tongue",
-            "EyeReflection",
-            "Nostrils",
-            "Cornea",
-            "Eyelashes",
-            "Sclera",
-            "Ears",
-            "Tear"
+			"defaultMat",
+			"Genitalia",
+			"Anus",
+			"Cornea",
+			"Ears",
+			"Eyelashes",
+			"EyeReflection",
+			"Face",
+			"Feet",
+			"Fingernails",
+			"Forearms",
+			"Gums",
+			"Hands",
+			"Head",
+			"Hips",
+			"InnerMouth",
+			"Irises",
+			"Lacrimals",
+			"Legs",
+			"Lips",
+			"Neck",
+			"Nipples",
+			"Nostrils",
+			"Pupils",
+			"Sclera",
+			"Shoulders",
+			"Tear",
+			"Teeth",
+			"Toenails",
+			"Tongue",
+			"Torso"
         };
 
         public static IList<Material> GetMaterialsToHide(DAZSkinV2 skin)
         {
-#if (POV_DIAGNOSTICS)
-            if (skin == null) throw new NullReferenceException("skin is null");
-            if (skin.GPUmaterials == null) throw new NullReferenceException("skin materials are null");
-#endif
 
             var materials = new List<Material>(MaterialsToHide.Length);
+			
 
             foreach (var material in skin.GPUmaterials)
             {
@@ -512,12 +328,6 @@ public class ImprovedPoV : MVRScript
 
                 materials.Add(material);
             }
-
-#if (POV_DIAGNOSTICS)
-            // NOTE: Tear is not on all models
-            if (materials.Count < MaterialsToHide.Length - 1)
-                throw new Exception("Not enough materials found to hide. List: " + string.Join(", ", skin.GPUmaterials.Select(m => m.name).ToArray()));
-#endif
 
             return materials;
         }
@@ -529,12 +339,13 @@ public class ImprovedPoV : MVRScript
                 { "Custom/Subsurface/GlossNMCullComputeBuff", Shader.Find("Custom/Subsurface/TransparentGlossNMSeparateAlphaComputeBuff") },
                 { "Custom/Subsurface/GlossNMDetailCullComputeBuff", Shader.Find("Custom/Subsurface/TransparentGlossNMDetailNoCullSeparateAlphaComputeBuff") },
                 { "Custom/Subsurface/CullComputeBuff", Shader.Find("Custom/Subsurface/TransparentSeparateAlphaComputeBuff") },
-
+				{ "Custom/Subsurface/GlossNMTessMappedFixedComputeBuff", Shader.Find("Custom/Subsurface/TransparentGlossNMSeparateAlphaComputeBuff") },
                 // Transparent materials
                 { "Custom/Subsurface/TransparentGlossNoCullSeparateAlphaComputeBuff", null },
                 { "Custom/Subsurface/TransparentGlossComputeBuff", null },
                 { "Custom/Subsurface/TransparentComputeBuff", null },
                 { "Custom/Subsurface/AlphaMaskComputeBuff", null },
+				//{ "Custom/Subsurface/GlossNMTessMappedFixedComputeBuff", null },
                 { "Marmoset/Transparent/Simple Glass/Specular IBLComputeBuff", null },
             };
 
@@ -607,112 +418,5 @@ public class ImprovedPoV : MVRScript
             }
         }
     }
-
-    public class HairHandler : IHandler
-    {
-        public class MaterialReference
-        {
-            public Material material;
-            public float originalAlphaAdjust;
-        }
-
-        private Material _hairMaterial;
-        private string _hairShaderProperty;
-        private float _hairShaderHiddenValue;
-        private float _hairShaderOriginalValue;
-        private List<MaterialReference> _materialRefs;
-
-        public int Configure(DAZCharacter character, DAZHairGroup hair)
-        {
-            if (hair.name == "NoHair")
-                return HandlerConfigurationResult.CannotApply;
-
-            if (hair.name == "Sim2Hair" || hair.name == "Sim2HairMale")
-                return ConfigureSimV2Hair(hair);
-            else if (hair.name == "SimHairGroup" || hair.name == "SimHairGroup2")
-                return ConfigureSimHair(hair);
-            else
-                return ConfigureSimpleHair(hair);
-        }
-
-        private int ConfigureSimV2Hair(DAZHairGroup hair)
-        {
-            var materialRefs = new List<MaterialReference>(GetScalpMaterialReferences(hair));
-            if (materialRefs.Count != 0) _materialRefs = materialRefs;
-
-            var hairMaterial = hair.GetComponentInChildren<MeshRenderer>()?.material;
-            if (hairMaterial == null)
-                return HandlerConfigurationResult.TryAgainLater;
-
-            _hairMaterial = hairMaterial;
-            _hairShaderProperty = "_StandWidth";
-            _hairShaderHiddenValue = 0f;
-            _hairShaderOriginalValue = _hairMaterial.GetFloat(_hairShaderProperty);
-            return HandlerConfigurationResult.Success;
-        }
-
-        private int ConfigureSimHair(DAZHairGroup hair)
-        {
-            SuperController.LogError("Hair " + hair.name + " is not supported!");
-            return HandlerConfigurationResult.CannotApply;
-        }
-
-        private int ConfigureSimpleHair(DAZHairGroup hair)
-        {
-            var materialRefs = hair.GetComponentsInChildren<DAZMesh>()
-                .SelectMany(m => m.materials)
-                .Distinct()
-                .Select(m => new MaterialReference
-                {
-                    material = m,
-                    originalAlphaAdjust = m.GetFloat("_AlphaAdjust")
-                })
-                .ToList();
-
-            if (materialRefs.Count == 0)
-                return HandlerConfigurationResult.TryAgainLater;
-
-            materialRefs.AddRange(GetScalpMaterialReferences(hair));
-
-            _materialRefs = materialRefs;
-
-            return HandlerConfigurationResult.Success;
-        }
-
-        private IEnumerable<MaterialReference> GetScalpMaterialReferences(DAZHairGroup hair)
-        {
-            return hair.GetComponentsInChildren<DAZSkinWrap>()
-                .SelectMany(m => m.GPUmaterials)
-                .Distinct()
-                .Select(m => new MaterialReference
-                {
-                    material = m,
-                    originalAlphaAdjust = m.GetFloat("_AlphaAdjust")
-                });
-        }
-
-        public void Restore()
-        {
-            _hairMaterial = null;
-            _materialRefs = null;
-        }
-
-        public void BeforeRender()
-        {
-            if (_hairMaterial != null)
-                _hairMaterial.SetFloat(_hairShaderProperty, _hairShaderHiddenValue);
-            if (_materialRefs != null)
-                foreach (var materialRef in _materialRefs)
-                    materialRef.material.SetFloat("_AlphaAdjust", -1f);
-        }
-
-        public void AfterRender()
-        {
-            if (_hairMaterial != null)
-                _hairMaterial.SetFloat(_hairShaderProperty, _hairShaderOriginalValue);
-            if (_materialRefs != null)
-                foreach (var materialRef in _materialRefs)
-                    materialRef.material.SetFloat("_AlphaAdjust", materialRef.originalAlphaAdjust);
-        }
-    }
 }
+
