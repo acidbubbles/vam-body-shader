@@ -4,12 +4,11 @@ using System.Linq;
 using UnityEngine;
 
 /// <summary>
-/// hide character version 1.0
-/// a modification of acidbubbles "improved pov"
-/// tl;dr: it completely hides the actor the plugin is applied on. does not hide clothing or hair.
-/// you can modify what parts are hidden by removing things under "MaterialsToHide" (the list starting with defaultMat)
+/// Body Shader 1.0.0, by Acid Bubbles
+/// Concept developed by Skeet
+/// Allows applying custom shaders to persons
 /// </summary>
-public class HideCharacter : MVRScript
+public class BodyShader : MVRScript
 {
     private Atom _person;
     private DAZCharacterSelector _selector;
@@ -27,6 +26,8 @@ public class HideCharacter : MVRScript
     private bool _failedOnce;
     // When waiting for a model to load, how long before we abandon
     private int _tryAgainAttempts;
+    bool once;
+    private JSONStorableStringChooser _shaderJSON;
 
     public override void Init()
     {
@@ -43,8 +44,6 @@ public class HideCharacter : MVRScript
             _selector = _person.GetComponentInChildren<DAZCharacterSelector>();
 
             InitControls();
-            Camera.onPreRender += OnPreRender;
-            Camera.onPostRender += OnPreRender;
         }
         catch (Exception e)
         {
@@ -53,13 +52,18 @@ public class HideCharacter : MVRScript
         }
     }
 
-    private void OnPreRender(Camera cam)
+    private void InitControls()
     {
-
         try
         {
-            if (_skinHandler != null)
-                _skinHandler.BeforeRender();
+            var shaders = GameObject.FindObjectsOfType<Shader>().Select(s => s.name).ToList();
+            _shaderJSON = new JSONStorableStringChooser("Shader", shaders, "None", "Shaders", OnShaderChanged);
+            _shaderJSON.storeType = JSONStorableParam.StoreType.Physical;
+            RegisterStringChooser(_shaderJSON);
+            var linkPopup = CreateScrollablePopup(_shaderJSON);
+            linkPopup.popupPanelHeight = 600f;
+            if (!string.IsNullOrEmpty(_shaderJSON.val))
+                OnShaderChanged(_shaderJSON.val);
         }
         catch (Exception e)
         {
@@ -69,52 +73,9 @@ public class HideCharacter : MVRScript
         }
     }
 
-    private void OnPostRender(Camera cam)
+    private void OnShaderChanged(string val)
     {
-
-        try
-        {
-            if (_skinHandler != null)
-                _skinHandler.AfterRender();
-        }
-        catch (Exception e)
-        {
-            if (_failedOnce) return;
-            _failedOnce = true;
-            SuperController.LogError("something failed on postrender: " + e);
-        }
-    }
-
-    private void InitControls()
-    {
-        try
-        {
-            {
-                var possessedOnlyDefaultValue = true;
-
-                _hideCharacterToggleJSON = new JSONStorableBool("Toggle off to hide character", possessedOnlyDefaultValue);
-                RegisterBool(_hideCharacterToggleJSON);
-                var possessedOnlyCheckbox = CreateToggle(_hideCharacterToggleJSON, true);
-                possessedOnlyCheckbox.toggle.onValueChanged.AddListener(delegate (bool val)
-                {
-                    _dirty = true;
-                });
-            }
-
-            {
-                _hideCharacterJSON = new JSONStorableBool("Keep this toggled on", true);
-                RegisterBool(_hideCharacterJSON);
-                var hideFaceToggle = CreateToggle(_hideCharacterJSON, true);
-                hideFaceToggle.toggle.onValueChanged.AddListener(delegate (bool val)
-                {
-                    _dirty = true;
-                });
-            }
-        }
-        catch (Exception e)
-        {
-            SuperController.LogError("Failed to register controls: " + e);
-        }
+        _dirty = true;
     }
 
     public void OnDisable()
@@ -134,25 +95,16 @@ public class HideCharacter : MVRScript
     public void OnDestroy()
     {
         OnDisable();
-        Camera.onPreRender -= OnPreRender;
-        Camera.onPostRender -= OnPostRender;
     }
 
     public void Update()
     {
         try
         {
-            var active = !_hideCharacterToggleJSON.val;
-
-            if (!_lastActive && active)
+            if (!_lastActive)
             {
                 ApplyAll(true);
                 _lastActive = true;
-            }
-            else if (_lastActive && !active)
-            {
-                ApplyAll(false);
-                _lastActive = false;
             }
             else if (_dirty)
             {
@@ -174,7 +126,6 @@ public class HideCharacter : MVRScript
         }
     }
 
-    bool once;
     private void ApplyAll(bool active)
     {
         // Try again next frame
@@ -254,8 +205,6 @@ public class HideCharacter : MVRScript
     public interface IHandler
     {
         void Restore();
-        void BeforeRender();
-        void AfterRender();
     }
 
     public class SkinHandler : IHandler
@@ -282,44 +231,44 @@ public class HideCharacter : MVRScript
 
         public static readonly string[] MaterialsToHide = new[]
         {
-			"defaultMat",
-			"Genitalia",
-			"Anus",
-			"Cornea",
-			"Ears",
-			"Eyelashes",
-			"EyeReflection",
-			"Face",
-			"Feet",
-			"Fingernails",
-			"Forearms",
-			"Gums",
-			"Hands",
-			"Head",
-			"Hips",
-			"InnerMouth",
-			"Irises",
-			"Lacrimals",
-			"Legs",
-			"Lips",
-			"Neck",
-			"Nipples",
-			"Nostrils",
-			"Pupils",
-			"Sclera",
-			"Shoulders",
-			"Tear",
-			"Teeth",
-			"Toenails",
-			"Tongue",
-			"Torso"
+            "defaultMat",
+            "Genitalia",
+            "Anus",
+            "Cornea",
+            "Ears",
+            "Eyelashes",
+            "EyeReflection",
+            "Face",
+            "Feet",
+            "Fingernails",
+            "Forearms",
+            "Gums",
+            "Hands",
+            "Head",
+            "Hips",
+            "InnerMouth",
+            "Irises",
+            "Lacrimals",
+            "Legs",
+            "Lips",
+            "Neck",
+            "Nipples",
+            "Nostrils",
+            "Pupils",
+            "Sclera",
+            "Shoulders",
+            "Tear",
+            "Teeth",
+            "Toenails",
+            "Tongue",
+            "Torso"
         };
 
         public static IList<Material> GetMaterialsToHide(DAZSkinV2 skin)
         {
 
             var materials = new List<Material>(MaterialsToHide.Length);
-			
+
 
             foreach (var material in skin.GPUmaterials)
             {
@@ -339,7 +288,7 @@ public class HideCharacter : MVRScript
                 { "Custom/Subsurface/GlossNMCullComputeBuff", Shader.Find("Custom/Subsurface/TransparentGlossNMSeparateAlphaComputeBuff") },
                 { "Custom/Subsurface/GlossNMDetailCullComputeBuff", Shader.Find("Custom/Subsurface/TransparentGlossNMDetailNoCullSeparateAlphaComputeBuff") },
                 { "Custom/Subsurface/CullComputeBuff", Shader.Find("Custom/Subsurface/TransparentSeparateAlphaComputeBuff") },
-				{ "Custom/Subsurface/GlossNMTessMappedFixedComputeBuff", Shader.Find("Custom/Subsurface/TransparentGlossNMSeparateAlphaComputeBuff") },
+                { "Custom/Subsurface/GlossNMTessMappedFixedComputeBuff", Shader.Find("Custom/Subsurface/TransparentGlossNMSeparateAlphaComputeBuff") },
                 // Transparent materials
                 { "Custom/Subsurface/TransparentGlossNoCullSeparateAlphaComputeBuff", null },
                 { "Custom/Subsurface/TransparentGlossComputeBuff", null },
@@ -392,30 +341,6 @@ public class HideCharacter : MVRScript
 
             // This is a hack to force a refresh of the shaders cache
             _skin.BroadcastMessage("OnApplicationFocus", true);
-        }
-
-        public void BeforeRender()
-        {
-            foreach (var materialRef in _materialRefs)
-            {
-                var material = materialRef.material;
-                material.SetFloat("_AlphaAdjust", -1f);
-                var color = material.GetColor("_Color");
-                material.SetColor("_Color", new Color(color.r, color.g, color.b, 0f));
-                material.SetColor("_SpecColor", new Color(0f, 0f, 0f, 0f));
-            }
-        }
-
-        public void AfterRender()
-        {
-            foreach (var materialRef in _materialRefs)
-            {
-                var material = materialRef.material;
-                material.SetFloat("_AlphaAdjust", materialRef.originalAlphaAdjust);
-                var color = material.GetColor("_Color");
-                material.SetColor("_Color", new Color(color.r, color.g, color.b, materialRef.originalColorAlpha));
-                material.SetColor("_SpecColor", materialRef.originalSpecColor);
-            }
         }
     }
 }
