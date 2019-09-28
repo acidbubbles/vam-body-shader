@@ -56,12 +56,21 @@ public class BodyShader : MVRScript
     {
         try
         {
-            var shaders = GameObject.FindObjectsOfType<Shader>().Select(s => s.name).ToList();
+            var shaders = UnityEngine.Resources
+                .FindObjectsOfTypeAll(typeof(Shader))
+                .Cast<Shader>()
+                .Where(s => s != null)
+                .Select(s => s.name)
+                .Where(s => !string.IsNullOrEmpty(s) && !s.StartsWith("__"))
+                .OrderBy(s => s)
+                .ToList();
             _shaderJSON = new JSONStorableStringChooser("Shader", shaders, "None", "Shaders", OnShaderChanged);
             _shaderJSON.storeType = JSONStorableParam.StoreType.Physical;
             RegisterStringChooser(_shaderJSON);
             var linkPopup = CreateScrollablePopup(_shaderJSON);
-            linkPopup.popupPanelHeight = 600f;
+            linkPopup.popupPanelHeight = 1200f;
+            // TODO: Find a way to see the full names when open, otherwise it's useless. Worst case, only keep the end.
+            // linkPopup.labelWidth = 1200f;
             if (!string.IsNullOrEmpty(_shaderJSON.val))
                 OnShaderChanged(_shaderJSON.val);
         }
