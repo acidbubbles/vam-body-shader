@@ -12,6 +12,8 @@ public class BodyShader : MVRScript
 {
     private Atom _person;
     private DAZCharacterSelector _selector;
+    private JSONStorableStringChooser _shaderJSON;
+    /*
     private JSONStorableBool _hideCharacterToggleJSON;
     private JSONStorableBool _hideCharacterJSON;
 
@@ -27,7 +29,7 @@ public class BodyShader : MVRScript
     // When waiting for a model to load, how long before we abandon
     private int _tryAgainAttempts;
     bool once;
-    private JSONStorableStringChooser _shaderJSON;
+    */
 
     public override void Init()
     {
@@ -47,7 +49,7 @@ public class BodyShader : MVRScript
         }
         catch (Exception e)
         {
-            SuperController.LogError("something failed: " + e);
+            SuperController.LogError("Failed to init: " + e);
             DestroyImmediate(this);
         }
     }
@@ -76,17 +78,21 @@ public class BodyShader : MVRScript
         }
         catch (Exception e)
         {
-            if (_failedOnce) return;
-            _failedOnce = true;
-            SuperController.LogError("something failed on prerender: " + e);
+            SuperController.LogError("Failed to init controls: " + e);
         }
     }
 
     private void OnShaderChanged(string val)
     {
-        _dirty = true;
+        var shader = Shader.Find(val);
+        var skin = _selector.selectedCharacter.skin;
+        foreach (var mat in skin.GPUmaterials)
+        {
+            mat.shader = shader;
+        }
     }
 
+    /*
     public void OnDisable()
     {
         try
@@ -352,5 +358,6 @@ public class BodyShader : MVRScript
             _skin.BroadcastMessage("OnApplicationFocus", true);
         }
     }
+    */
 }
 
