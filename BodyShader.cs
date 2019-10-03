@@ -49,11 +49,19 @@ public class BodyShader : MVRScript
 
     private Atom _person;
     private DAZCharacterSelector _selector;
-    private JSONStorableStringChooser _shaderJSON;
     private bool _dirty;
     private DAZCharacter _character;
-    private Dictionary<Material, Shader> _original = new Dictionary<Material, Shader>();
+    private Dictionary<Material, Shader> _original;
+    private List<MapSettings> _map = new List<MapSettings>();
     private DAZHairGroup _hair;
+
+    private class MapSettings
+    {
+        public string ShaderName { get; set; }
+        public string MaterialName { get; set; }
+        public float Alpha { get; set; }
+        public int RenderQueue { get; set; }
+    }
 
     public override void Init()
     {
@@ -92,13 +100,38 @@ public class BodyShader : MVRScript
                 .Where(s => !string.IsNullOrEmpty(s) && !s.StartsWith("__"))
                 .OrderBy(s => s)
                 .ToList();
-            _shaderJSON = new JSONStorableStringChooser("Shader", shaders, DefaultShaderKey, "Shaders", (string val) => _dirty = true);
-            _shaderJSON.storeType = JSONStorableParam.StoreType.Physical;
-            RegisterStringChooser(_shaderJSON);
-            var linkPopup = CreateScrollablePopup(_shaderJSON);
-            linkPopup.popupPanelHeight = 1200f;
-            // TODO: Find a way to see the full names when open, otherwise it's useless. Worst case, only keep the end.
-            // linkPopup.labelWidth = 1200f;
+            foreach (var mat in SkinMaterials)
+            {
+                var settings = new MapSettings { MaterialName = mat };
+                _map.Add(settings);
+                var shaderJSON = new JSONStorableStringChooser($"Shader {settings.MaterialName}", shaders, DefaultShaderKey, $"Shaders {settings.MaterialName}", (string val) =>
+                {
+                    settings.ShaderName = val;
+                    _dirty = true;
+                });
+                shaderJSON.storeType = JSONStorableParam.StoreType.Physical;
+                RegisterStringChooser(shaderJSON);
+                var linkPopup = CreateScrollablePopup(shaderJSON, true);
+                linkPopup.popupPanelHeight = 1200f;
+                // TODO: Find a way to see the full names when open, otherwise it's useless. Worst case, only keep the end.
+                // linkPopup.labelWidth = 1200f;
+
+                var alphaJSON = new JSONStorableFloat($"Alpha {settings.MaterialName}", 0f, (float val) =>
+                {
+                    settings.Alpha = val;
+                    _dirty = true;
+                }, -1f, 1f);
+                RegisterFloat(alphaJSON);
+                CreateSlider(alphaJSON, true);
+
+                var renderQueue = new JSONStorableFloat($"Render Queue {settings.MaterialName}", 1999f, (float val) =>
+                {
+                    settings.RenderQueue = (int)Math.Round(val);
+                    _dirty = true;
+                }, -1f, 5000f);
+                RegisterFloat(renderQueue);
+                CreateSlider(renderQueue, true);
+            }
         }
         catch (Exception e)
         {
@@ -120,16 +153,16 @@ public class BodyShader : MVRScript
                 return;
             }
 
-            if (_shaderJSON.val == DefaultShaderKey)
-            {
-                if (_original != null)
-                {
-                    foreach (var x in _original)
-                        x.Key.shader = x.Value;
-                }
-                _dirty = false;
-                return;
-            }
+            // if (shaderJSON.val == DefaultShaderKey)
+            // {
+            //     if (_original != null)
+            //     {
+            //         foreach (var x in _original)
+            //             x.Key.shader = x.Value;
+            //     }
+            //     _dirty = false;
+            //     return;
+            // }
 
             _character = _selector.selectedCharacter;
             if (_character == null) return;
@@ -137,27 +170,35 @@ public class BodyShader : MVRScript
             if (skin == null) return;
             _hair = _selector.selectedHairGroup;
 
-            var shader = Shader.Find(_shaderJSON.val);
-            if (shader == null) return;
+            // SuperController.LogMessage(string.Join(", ", skin.GPUmaterials.Select(m => m.name).OrderBy(n => n).ToArray()));
+            // SuperController.LogMessage(string.Join(", ", _map.Select(m => m.Key).OrderBy(n => n).ToArray()));
 
             if (_original == null)
             {
+                _original = new Dictionary<Material, Shader>();
                 foreach (var mat in skin.GPUmaterials)
                 {
                     _original.Add(mat, mat.shader);
                 }
             }
 
-            foreach (var mat in skin.GPUmaterials)
+            foreach (var setting in _map)
             {
+                if (setting.ShaderName == DefaultShaderKey || setting.ShaderName == null) continue;
+                var shader = Shader.Find(setting.ShaderName);
+                if (shader == null) return;
+                var mat = skin.GPUmaterials.FirstOrDefault(x => x.name == setting.MaterialName);
+                if (mat == null) continue;
                 mat.shader = shader;
+                mat.SetFloat("_AlphaAdjust", setting.Alpha);
+                mat.renderQueue = setting.RenderQueue;
             }
 
-            var hairMaterial = _hair?.GetComponentInChildren<MeshRenderer>()?.material;
-            if (hairMaterial != null)
-            {
-                hairMaterial.shader = shader;
-            }
+            // var hairMaterial = _hair?.GetComponentInChildren<MeshRenderer>()?.material;
+            // if (hairMaterial != null)
+            // {
+            //     hairMaterial.shader = shader;
+            // }
 
             skin.BroadcastMessage("OnApplicationFocus", true);
             _dirty = false;
