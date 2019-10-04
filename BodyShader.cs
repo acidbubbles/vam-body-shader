@@ -12,39 +12,47 @@ public class BodyShader : MVRScript
 {
     private const string DefaultShaderKey = "Keep default";
 
-    public static readonly string[] SkinMaterials = new[]
+    public static readonly Dictionary<string, string[]> GroupedMaterials = new Dictionary<string, string[]>
     {
-            "defaultMat",
-            "Genitalia",
-            "Anus",
+        {
+            "Skin",
+             new[]
+            {
+                "defaultMat",
+                "Anus",
+                "Ears",
+                "Face",
+                "Feet",
+                "Forearms",
+                "Genitalia",
+                "Hands",
+                "Head",
+                "Hips",
+                "Legs",
+                "Neck",
+                "Nipples",
+                "Nostrils",
+                "Lips",
+                "Shoulders",
+                "Torso"
+            }
+        }
+        /*
             "Cornea",
-            "Ears",
             "Eyelashes",
             "EyeReflection",
-            "Face",
-            "Feet",
             "Fingernails",
-            "Forearms",
             "Gums",
-            "Hands",
-            "Head",
-            "Hips",
             "InnerMouth",
             "Irises",
             "Lacrimals",
-            "Legs",
-            "Lips",
-            "Neck",
-            "Nipples",
-            "Nostrils",
             "Pupils",
             "Sclera",
-            "Shoulders",
             "Tear",
             "Teeth",
             "Toenails",
             "Tongue",
-            "Torso"
+            */
         };
 
     private Atom _person;
@@ -54,6 +62,8 @@ public class BodyShader : MVRScript
     private Dictionary<Material, Shader> _original;
     private List<MapSettings> _map = new List<MapSettings>();
     private DAZHairGroup _hair;
+    private JSONStorableStringChooser _applyToJSON;
+    private JSONStorableStringChooser _shaderJSON;
 
     private class MapSettings
     {
@@ -77,6 +87,7 @@ public class BodyShader : MVRScript
             _person = containingAtom;
             _selector = _person.GetComponentInChildren<DAZCharacterSelector>();
 
+            InitSettings();
             InitControls();
 
             _dirty = true;
@@ -85,6 +96,15 @@ public class BodyShader : MVRScript
         {
             SuperController.LogError("Failed to init: " + e);
             DestroyImmediate(this);
+        }
+    }
+
+    private void InitSettings()
+    {
+        foreach (var mat in GroupedMaterials.Values.SelectMany(v => v).Distinct())
+        {
+            var settings = new MapSettings { MaterialName = mat };
+            _map.Add(settings);
         }
     }
 
@@ -100,43 +120,55 @@ public class BodyShader : MVRScript
                 .Where(s => !string.IsNullOrEmpty(s) && !s.StartsWith("__"))
                 .OrderBy(s => s)
                 .ToList();
-            foreach (var mat in SkinMaterials)
-            {
-                var settings = new MapSettings { MaterialName = mat };
-                _map.Add(settings);
-                var shaderJSON = new JSONStorableStringChooser($"Shader {settings.MaterialName}", shaders, DefaultShaderKey, $"Shaders {settings.MaterialName}", (string val) =>
-                {
-                    settings.ShaderName = val;
-                    _dirty = true;
-                });
-                shaderJSON.storeType = JSONStorableParam.StoreType.Physical;
-                RegisterStringChooser(shaderJSON);
-                var linkPopup = CreateScrollablePopup(shaderJSON, true);
-                linkPopup.popupPanelHeight = 1200f;
-                // TODO: Find a way to see the full names when open, otherwise it's useless. Worst case, only keep the end.
-                // linkPopup.labelWidth = 1200f;
+            var groups = new List<string> { "Skin" };
+            _applyToJSON = new JSONStorableStringChooser("Apply to...", groups, groups.FirstOrDefault(), "Apply to...");
+            var applyToPopup = CreateScrollablePopup(_applyToJSON, false);
+            applyToPopup.popupPanelHeight = 1200f;
 
-                var alphaJSON = new JSONStorableFloat($"Alpha {settings.MaterialName}", 0f, (float val) =>
-                {
-                    settings.Alpha = val;
-                    _dirty = true;
-                }, -1f, 1f);
-                RegisterFloat(alphaJSON);
-                CreateSlider(alphaJSON, true);
+            _shaderJSON = new JSONStorableStringChooser("Shader", shaders, DefaultShaderKey, $"Shader", (string val) => ApplyToGroup());
+            _shaderJSON.storeType = JSONStorableParam.StoreType.Physical;
+            var shaderPopup = CreateScrollablePopup(_shaderJSON, true);
+            shaderPopup.popupPanelHeight = 1200f;
+            // TODO: Find a way to see the full names when open, otherwise it's useless. Worst case, only keep the end.
+            // linkPopup.labelWidth = 1200f;
 
-                var renderQueue = new JSONStorableFloat($"Render Queue {settings.MaterialName}", 1999f, (float val) =>
-                {
-                    settings.RenderQueue = (int)Math.Round(val);
-                    _dirty = true;
-                }, -1f, 5000f);
-                RegisterFloat(renderQueue);
-                CreateSlider(renderQueue, true);
-            }
+            // var alphaJSON = new JSONStorableFloat($"Alpha {settings.MaterialName}", 0f, (float val) =>
+            // {
+            //     settings.Alpha = val;
+            //     _dirty = true;
+            // }, -1f, 1f);
+            // RegisterFloat(alphaJSON);
+            // CreateSlider(alphaJSON, true);
+
+            // var renderQueue = new JSONStorableFloat($"Render Queue {settings.MaterialName}", 1999f, (float val) =>
+            // {
+            //     settings.RenderQueue = (int)Math.Round(val);
+            //     _dirty = true;
+            // }, -1f, 5000f);
+            // RegisterFloat(renderQueue);
+            // CreateSlider(renderQueue, true);
         }
         catch (Exception e)
         {
             SuperController.LogError("Failed to init controls: " + e);
         }
+    }
+
+    private void ApplyToGroup()
+    {
+        var group = _applyToJSON.val;
+        string[] materialNames;
+        if (!GroupedMaterials.TryGetValue(group, out materialNames))
+            return;
+
+        foreach (var materialName in materialNames)
+        {
+            var setting = _map.FirstOrDefault(m => m.MaterialName == materialName);
+            if (setting == null) continue;
+            setting.ShaderName = _shaderJSON.val;
+        }
+
+        _dirty = true;
     }
 
     public void Update()
