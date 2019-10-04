@@ -36,23 +36,33 @@ public class BodyShader : MVRScript
                 "Shoulders",
                 "Torso"
             }
+        },
+        {
+            "Face Internals",
+             new[]
+            {
+                "Cornea",
+                "Eyelashes",
+                "EyeReflection",
+                "Gums",
+                "InnerMouth",
+                "Irises",
+                "Lacrimals",
+                "Pupils",
+                "Sclera",
+                "Tear",
+                "Teeth",
+                "Tongue",
+            }
+        },
+        {
+            "Nails",
+             new[]
+            {
+                "Fingernails",
+                "Toenails",
+            }
         }
-        /*
-            "Cornea",
-            "Eyelashes",
-            "EyeReflection",
-            "Fingernails",
-            "Gums",
-            "InnerMouth",
-            "Irises",
-            "Lacrimals",
-            "Pupils",
-            "Sclera",
-            "Tear",
-            "Teeth",
-            "Toenails",
-            "Tongue",
-            */
         };
 
     private Atom _person;
@@ -117,7 +127,7 @@ public class BodyShader : MVRScript
             var refreshShadersJSON = new JSONStorableAction("Refresh shaders", () => _applyToJSON.choices = ScanShaders());
             CreateButton("Refresh shaders", false).button.onClick.AddListener(() => _shaderJSON.choices = ScanShaders());
 
-            var groups = new List<string> { "Skin" };
+            var groups = GroupedMaterials.Keys.ToList();
             _applyToJSON = new JSONStorableStringChooser("Apply to...", groups, groups.FirstOrDefault(), "Apply to...");
             var applyToPopup = CreateScrollablePopup(_applyToJSON, false);
             applyToPopup.popupPanelHeight = 1200f;
