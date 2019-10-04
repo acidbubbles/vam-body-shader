@@ -64,6 +64,8 @@ public class BodyShader : MVRScript
     private DAZHairGroup _hair;
     private JSONStorableStringChooser _applyToJSON;
     private JSONStorableStringChooser _shaderJSON;
+    private JSONStorableFloat _alphaJSON;
+    private JSONStorableFloat _renderQueue;
 
     private class MapSettings
     {
@@ -112,46 +114,43 @@ public class BodyShader : MVRScript
     {
         try
         {
-            var shaders = UnityEngine.Resources
-                .FindObjectsOfTypeAll(typeof(Shader))
-                .Cast<Shader>()
-                .Where(s => s != null)
-                .Select(s => s.name)
-                .Where(s => !string.IsNullOrEmpty(s) && !s.StartsWith("__"))
-                .OrderBy(s => s)
-                .ToList();
+            var refreshShadersJSON = new JSONStorableAction("Refresh shaders", () => _applyToJSON.choices = ScanShaders());
+            CreateButton("Refresh shaders", false).button.onClick.AddListener(() => _shaderJSON.choices = ScanShaders());
+
             var groups = new List<string> { "Skin" };
             _applyToJSON = new JSONStorableStringChooser("Apply to...", groups, groups.FirstOrDefault(), "Apply to...");
             var applyToPopup = CreateScrollablePopup(_applyToJSON, false);
             applyToPopup.popupPanelHeight = 1200f;
 
-            _shaderJSON = new JSONStorableStringChooser("Shader", shaders, DefaultShaderKey, $"Shader", (string val) => ApplyToGroup());
+            _shaderJSON = new JSONStorableStringChooser("Shader", ScanShaders(), DefaultShaderKey, $"Shader", (string val) => ApplyToGroup());
             _shaderJSON.storeType = JSONStorableParam.StoreType.Physical;
             var shaderPopup = CreateScrollablePopup(_shaderJSON, true);
             shaderPopup.popupPanelHeight = 1200f;
             // TODO: Find a way to see the full names when open, otherwise it's useless. Worst case, only keep the end.
             // linkPopup.labelWidth = 1200f;
 
-            // var alphaJSON = new JSONStorableFloat($"Alpha {settings.MaterialName}", 0f, (float val) =>
-            // {
-            //     settings.Alpha = val;
-            //     _dirty = true;
-            // }, -1f, 1f);
-            // RegisterFloat(alphaJSON);
-            // CreateSlider(alphaJSON, true);
+            _alphaJSON = new JSONStorableFloat($"Alpha", 0f, (float val) => ApplyToGroup(), -1f, 1f);
+            CreateSlider(_alphaJSON, true);
 
-            // var renderQueue = new JSONStorableFloat($"Render Queue {settings.MaterialName}", 1999f, (float val) =>
-            // {
-            //     settings.RenderQueue = (int)Math.Round(val);
-            //     _dirty = true;
-            // }, -1f, 5000f);
-            // RegisterFloat(renderQueue);
-            // CreateSlider(renderQueue, true);
+            _renderQueue = new JSONStorableFloat($"Render Queue", 1999f, (float val) => ApplyToGroup(), -1f, 5000f);
+            CreateSlider(_renderQueue, true);
         }
         catch (Exception e)
         {
             SuperController.LogError("Failed to init controls: " + e);
         }
+    }
+
+    private static List<string> ScanShaders()
+    {
+        return UnityEngine.Resources
+            .FindObjectsOfTypeAll(typeof(Shader))
+            .Cast<Shader>()
+            .Where(s => s != null)
+            .Select(s => s.name)
+            .Where(s => !string.IsNullOrEmpty(s) && !s.StartsWith("__"))
+            .OrderBy(s => s)
+            .ToList();
     }
 
     private void ApplyToGroup()
@@ -166,6 +165,8 @@ public class BodyShader : MVRScript
             var setting = _map.FirstOrDefault(m => m.MaterialName == materialName);
             if (setting == null) continue;
             setting.ShaderName = _shaderJSON.val;
+            setting.Alpha = _alphaJSON.val;
+            setting.RenderQueue = (int)Math.Round(_renderQueue.val);
         }
 
         _dirty = true;
