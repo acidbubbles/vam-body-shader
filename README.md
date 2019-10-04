@@ -2,7 +2,7 @@
 
 Apply any shader to actors in Virt-A-Mate!
 
-_This plugin is not yet usable_
+**This plugin has been abandoned. VaM uses shaders to actually place people on the screen, so fiddling with it breaks movement completely. It'll only work with the T-pose, and even then will not work very well.**
 
 ## About
 
