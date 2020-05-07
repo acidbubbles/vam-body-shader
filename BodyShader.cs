@@ -70,8 +70,8 @@ public class BodyShader : MVRScript
     private bool _dirty;
     private DAZCharacter _character;
     private Dictionary<Material, Shader> _original;
-    private List<MapSettings> _map = new List<MapSettings>();
-    private DAZHairGroup _hair;
+    private readonly List<MapSettings> _map = new List<MapSettings>();
+    // private DAZHairGroup[] _hair;
     private JSONStorableStringChooser _applyToJSON;
     private JSONStorableStringChooser _shaderJSON;
     private JSONStorableFloat _alphaJSON;
@@ -128,12 +128,11 @@ public class BodyShader : MVRScript
             CreateButton("Refresh shaders", false).button.onClick.AddListener(() => _shaderJSON.choices = ScanShaders());
 
             var groups = GroupedMaterials.Keys.ToList();
-            _applyToJSON = new JSONStorableStringChooser("Apply to...", groups, groups.FirstOrDefault(), "Apply to...");
+            _applyToJSON = new JSONStorableStringChooser("Apply to...", groups, groups.FirstOrDefault(), "Apply to...", (string _) => _shaderJSON.valNoCallback = "");
             var applyToPopup = CreateScrollablePopup(_applyToJSON, false);
             applyToPopup.popupPanelHeight = 1200f;
 
             _shaderJSON = new JSONStorableStringChooser("Shader", ScanShaders(), DefaultShaderKey, $"Shader", (string val) => ApplyToGroup());
-            _shaderJSON.storeType = JSONStorableParam.StoreType.Physical;
             var shaderPopup = CreateScrollablePopup(_shaderJSON, true);
             shaderPopup.popupPanelHeight = 1200f;
             // TODO: Find a way to see the full names when open, otherwise it's useless. Worst case, only keep the end.
@@ -190,8 +189,8 @@ public class BodyShader : MVRScript
             {
                 if (_selector.selectedCharacter != _character)
                     _dirty = true;
-                else if (_selector.selectedHairGroup != _hair)
-                    _dirty = true;
+                // else if (_selector.hairItems.FirstOrDefault(h => h.active) != _hair?.FirstOrDefault())
+                //     _dirty = true;
 
                 return;
             }
@@ -207,11 +206,12 @@ public class BodyShader : MVRScript
             //     return;
             // }
 
+            _dirty = false;
             _character = _selector.selectedCharacter;
             if (_character == null) return;
             var skin = _character.skin;
             if (skin == null) return;
-            _hair = _selector.selectedHairGroup;
+            // _hair = _selector.hairItems.Where(h => h.active).ToArray();
 
             // SuperController.LogMessage(string.Join(", ", skin.GPUmaterials.Select(m => m.name).OrderBy(n => n).ToArray()));
             // SuperController.LogMessage(string.Join(", ", _map.Select(m => m.Key).OrderBy(n => n).ToArray()));
@@ -230,21 +230,26 @@ public class BodyShader : MVRScript
                 if (setting.ShaderName == DefaultShaderKey || setting.ShaderName == null) continue;
                 var shader = Shader.Find(setting.ShaderName);
                 if (shader == null) return;
-                var mat = skin.GPUmaterials.FirstOrDefault(x => x.name == setting.MaterialName);
+                var mat = skin.GPUmaterials.FirstOrDefault(x => x.name.StartsWith(setting.MaterialName));
                 if (mat == null) continue;
                 mat.shader = shader;
                 mat.SetFloat("_AlphaAdjust", setting.Alpha);
                 mat.renderQueue = setting.RenderQueue;
             }
 
-            // var hairMaterial = _hair?.GetComponentInChildren<MeshRenderer>()?.material;
-            // if (hairMaterial != null)
+            // if (_hair != null)
             // {
-            //     hairMaterial.shader = shader;
+            //     foreach (var hair in _hair)
+            //     {
+            //         var hairMaterial = hair?.GetComponentInChildren<MeshRenderer>()?.material;
+            //         if (hairMaterial != null)
+            //         {
+            //             hairMaterial.shader = shader;
+            //         }
+            //     }
             // }
 
             skin.BroadcastMessage("OnApplicationFocus", true);
-            _dirty = false;
         }
         catch (Exception e)
         {
